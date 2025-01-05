@@ -1,0 +1,12 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+clap = { version = "4.5.23", features = ["derive"] }
+tokio = { version = "1.42.0", features = ["full"] }
+tokio-rustls = "0.26.1"
+webpki-roots = "0.26.7"
+shared = { path = "../shared" }
