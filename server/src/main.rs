@@ -96,9 +96,9 @@ async fn handle_connection(
 ) -> anyhow::Result<()> {
     let tls_stream = acceptor.accept(stream).await?;
 
-    let (mut tls_reader, mut tls_writer) = tokio::io::split(tls_stream);
+    let (mut reader, mut writer) = tokio::io::split(tls_stream);
 
-    let command = if let Some(command) = shared::Command::read(&mut tls_reader).await? {
+    let command = if let Some(command) = shared::Command::read(&mut reader).await? {
         command
     } else {
         tracing::warn!("invalid packet received from {peer_addr}");
@@ -123,7 +123,7 @@ async fn handle_connection(
 
             file.set_len(len).await?;
 
-            let mut reader = tls_reader.take(len);
+            let mut reader = reader.take(len);
             tokio::io::copy(&mut reader, &mut file).await?;
 
             (shared::Response::UploadDone, None)
@@ -151,10 +151,10 @@ async fn handle_connection(
         }
     };
 
-    response.write(&mut tls_writer).await?;
+    response.write(&mut writer).await?;
 
     if let Some(mut file) = file {
-        tokio::io::copy(&mut file, &mut tls_writer).await?;
+        tokio::io::copy(&mut file, &mut writer).await?;
     }
 
     Ok(())
