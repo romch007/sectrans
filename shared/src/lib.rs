@@ -1,3 +1,4 @@
+use anyhow::bail;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub const DEFAULT_PORT: u16 = 6543;
@@ -14,7 +15,7 @@ impl Command {
     const UPLOAD_ID: u8 = 2;
     const DOWNLOAD_ID: u8 = 3;
 
-    pub async fn write<W>(&self, writer: &mut W) -> std::io::Result<()>
+    pub async fn write<W>(&self, writer: &mut W) -> anyhow::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -36,7 +37,7 @@ impl Command {
         Ok(())
     }
 
-    pub async fn read<R>(reader: &mut R) -> std::io::Result<Option<Self>>
+    pub async fn read<R>(reader: &mut R) -> anyhow::Result<Option<Self>>
     where
         R: AsyncRead + Unpin,
     {
@@ -72,7 +73,7 @@ impl Response {
     const DOWNLOAD_START_ID: u8 = 3;
     const ERROR_ID: u8 = 4;
 
-    pub async fn write<W>(&self, writer: &mut W) -> std::io::Result<()>
+    pub async fn write<W>(&self, writer: &mut W) -> anyhow::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -102,7 +103,7 @@ impl Response {
         Ok(())
     }
 
-    pub async fn read<R>(reader: &mut R) -> std::io::Result<Option<Self>>
+    pub async fn read<R>(reader: &mut R) -> anyhow::Result<Option<Self>>
     where
         R: AsyncRead + Unpin,
     {
@@ -135,21 +136,30 @@ impl Response {
     }
 }
 
-async fn write_str<W>(writer: &mut W, input: &str) -> std::io::Result<()>
+const MAX_STR_LEN: usize = 4096;
+
+async fn write_str<W>(writer: &mut W, input: &str) -> anyhow::Result<()>
 where
     W: AsyncWrite + Unpin,
 {
+    if input.len() > MAX_STR_LEN {
+        bail!("string is larger than {MAX_STR_LEN}")
+    }
+
     writer.write_u64(input.len() as u64).await?;
     writer.write_all(input.as_bytes()).await?;
 
     Ok(())
 }
 
-async fn read_str<R>(reader: &mut R) -> std::io::Result<String>
+async fn read_str<R>(reader: &mut R) -> anyhow::Result<String>
 where
     R: AsyncRead + Unpin,
 {
     let len = reader.read_u64().await? as usize;
+    if len > MAX_STR_LEN {
+        bail!("string is larger than {MAX_STR_LEN}")
+    }
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf).await?;
