@@ -10,21 +10,25 @@ pub enum Command {
 }
 
 impl Command {
+    const LIST_ID: u8 = 1;
+    const UPLOAD_ID: u8 = 2;
+    const DOWNLOAD_ID: u8 = 3;
+
     pub async fn write<W>(&self, writer: &mut W) -> std::io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
         match self {
             Command::List => {
-                writer.write_u8(1).await?;
+                writer.write_u8(Self::LIST_ID).await?;
             }
             Command::Upload { filename, len } => {
-                writer.write_u8(2).await?;
+                writer.write_u8(Self::UPLOAD_ID).await?;
                 write_str(writer, filename).await?;
                 writer.write_u64(*len).await?;
             }
             Command::Download { filename } => {
-                writer.write_u8(3).await?;
+                writer.write_u8(Self::DOWNLOAD_ID).await?;
                 write_str(writer, filename).await?;
             }
         };
@@ -37,14 +41,14 @@ impl Command {
         R: AsyncRead + Unpin,
     {
         match reader.read_u8().await? {
-            1 => Ok(Some(Self::List)),
-            2 => {
+            Self::LIST_ID => Ok(Some(Self::List)),
+            Self::UPLOAD_ID => {
                 let filename = read_str(reader).await?;
                 let len = reader.read_u64().await?;
 
                 Ok(Some(Self::Upload { filename, len }))
             }
-            3 => {
+            Self::DOWNLOAD_ID => {
                 let filename = read_str(reader).await?;
 
                 Ok(Some(Self::Download { filename }))
@@ -63,13 +67,18 @@ pub enum Response {
 }
 
 impl Response {
+    const LIST_RESULT_ID: u8 = 1;
+    const UPLOAD_DONE_ID: u8 = 2;
+    const DOWNLOAD_START_ID: u8 = 3;
+    const ERROR_ID: u8 = 4;
+
     pub async fn write<W>(&self, writer: &mut W) -> std::io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
         match self {
             Response::ListResult { files } => {
-                writer.write_u8(1).await?;
+                writer.write_u8(Self::LIST_RESULT_ID).await?;
                 writer.write_u64(files.len() as u64).await?;
 
                 for filename in files {
@@ -77,15 +86,15 @@ impl Response {
                 }
             }
             Response::UploadDone => {
-                writer.write_u8(2).await?;
+                writer.write_u8(Self::UPLOAD_DONE_ID).await?;
             }
             Response::DownloadStart { filename, len } => {
-                writer.write_u8(3).await?;
+                writer.write_u8(Self::DOWNLOAD_START_ID).await?;
                 writer.write_u64(*len).await?;
                 write_str(writer, filename).await?;
             }
             Response::Error { message } => {
-                writer.write_u8(4).await?;
+                writer.write_u8(Self::ERROR_ID).await?;
                 write_str(writer, message).await?;
             }
         };
@@ -98,7 +107,7 @@ impl Response {
         R: AsyncRead + Unpin,
     {
         match reader.read_u8().await? {
-            1 => {
+            Self::LIST_RESULT_ID => {
                 let len = reader.read_u64().await? as usize;
                 let mut files = Vec::with_capacity(len);
 
@@ -109,14 +118,14 @@ impl Response {
 
                 Ok(Some(Self::ListResult { files }))
             }
-            2 => Ok(Some(Self::UploadDone)),
-            3 => {
+            Self::UPLOAD_DONE_ID => Ok(Some(Self::UploadDone)),
+            Self::DOWNLOAD_START_ID => {
                 let len = reader.read_u64().await?;
                 let filename = read_str(reader).await?;
 
                 Ok(Some(Self::DownloadStart { filename, len }))
             }
-            4 => {
+            Self::ERROR_ID => {
                 let message = read_str(reader).await?;
 
                 Ok(Some(Self::Error { message }))
