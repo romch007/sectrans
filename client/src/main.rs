@@ -15,9 +15,15 @@ use tokio_rustls::{
 
 #[derive(Debug, Parser)]
 struct Args {
+    /// Skip certificate verification (INSECURE!)
     #[arg(short = 'k', long, default_value_t = true)]
     insecure: bool,
 
+    /// Server address
+    #[arg(short = 'l', long)]
+    address: Option<IpAddr>,
+
+    /// Server port
     #[arg(short, long)]
     port: Option<u16>,
 
@@ -27,8 +33,11 @@ struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// List files present on the server
     List,
+    /// Upload a local file
     Upload { filepath: PathBuf },
+    /// Download a remote file
     Download { filename: String },
 }
 
@@ -40,8 +49,10 @@ async fn main() {
 async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let root_cert_store =
-        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let root_cert_store = webpki_roots::TLS_SERVER_ROOTS
+        .iter()
+        .cloned()
+        .collect::<rustls::RootCertStore>();
 
     let mut config = rustls::ClientConfig::builder()
         .with_root_certificates(root_cert_store)
@@ -56,7 +67,7 @@ async fn run() -> anyhow::Result<()> {
     let connector = TlsConnector::from(Arc::new(config));
 
     let sockaddr = SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        args.address.unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         args.port.unwrap_or(shared::DEFAULT_PORT),
     );
     let stream = tokio::net::TcpStream::connect(sockaddr).await?;
