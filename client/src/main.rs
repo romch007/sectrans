@@ -1,12 +1,8 @@
 mod nocert;
 
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::PathBuf,
-    sync::Arc,
-};
-
+use anyhow::anyhow;
 use clap::{Parser, Subcommand};
+use std::{net::ToSocketAddrs, path::PathBuf, sync::Arc};
 use tokio::io::AsyncReadExt;
 use tokio_rustls::{
     rustls::{self, pki_types::ServerName},
@@ -21,7 +17,7 @@ struct Args {
 
     /// Server address
     #[arg(short = 'l', long)]
-    address: Option<IpAddr>,
+    address: Option<String>,
 
     /// Server port
     #[arg(short, long)]
@@ -66,13 +62,17 @@ async fn run() -> anyhow::Result<()> {
 
     let connector = TlsConnector::from(Arc::new(config));
 
-    let sockaddr = SocketAddr::new(
-        args.address.unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)),
-        args.port.unwrap_or(shared::DEFAULT_PORT),
-    );
+    let address = args.address.as_deref().unwrap_or("localhost");
+    let port = args.port.unwrap_or(shared::DEFAULT_PORT);
+
+    let sockaddr = (address, port)
+        .to_socket_addrs()?
+        .find(|saddr| saddr.is_ipv4())
+        .ok_or(anyhow!("no address found"))?;
+
     let stream = tokio::net::TcpStream::connect(sockaddr).await?;
 
-    let domain = ServerName::try_from("localhost")?.to_owned();
+    let domain = ServerName::try_from(address)?.to_owned();
 
     let stream = connector.connect(domain, stream).await?;
     let (mut reader, mut writer) = tokio::io::split(stream);
